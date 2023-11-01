@@ -11,10 +11,8 @@ class ARPESNet(nn.Module):
                  dropout=0.0, 
                  fcw=50,  
                  kernel_size=3,
-                 predict=False
                 ): 
         super().__init__()
-        self.predict = predict
         self.convs = Sequential(
             Conv2d(in_channels=in_channels, out_channels=hidden_channels, kernel_size=kernel_size, stride=1, padding=2),
             ReLU(),
@@ -47,18 +45,6 @@ class ARPESNet(nn.Module):
     def forward(self, x):
         x = self.convs(x)
         x = self.flat(x)
-        print(x)
-        if self.predict:
-            # load the mean and std 
-            train_mean, train_std = torch.load('mean_std.pt')
-            mean = torch.mean(x, dim=0)
-            std = torch.std(x, dim=0)
-            std_nonzero = std.nonzero(as_tuple=True)[0]
-            x[:, std_nonzero] = (x[:, std_nonzero] - mean[std_nonzero]) / std[std_nonzero]
-            x = x * train_std + train_mean
-        print(x.shape)
-        print(x)
-
         x = self.fc1(self.dropout(x))
         x = ReLU()(x)
         x = self.fc2(self.dropout(x))
