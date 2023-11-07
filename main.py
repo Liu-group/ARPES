@@ -37,7 +37,6 @@ def load_data(data_path, name, num_classes):
         y[y==2]=1
     return x, y, temp
 
-    
 def main():
     args = parse_args()
     if args.mode == 'train':

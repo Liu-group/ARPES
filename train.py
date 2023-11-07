@@ -1,11 +1,10 @@
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, balanced_accuracy_score
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import copy
 import os
 import numpy as np
-from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
 from torchvision.transforms import RandomAffine, RandomRotation, Normalize
@@ -41,11 +40,11 @@ def run_training(args, model, data):
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
     
-    num_labels = np.bincount(train_dataset.targets)
-    weight = torch.tensor([(1 / i) * (num_labels.sum() / 2.0) for i in num_labels]).to(device)
-    loss_func = nn.CrossEntropyLoss(weight=weight)
+    #num_labels = np.bincount(train_dataset.targets)
+    #weight = torch.tensor([(1 / i) * (num_labels.sum() / 2.0) for i in num_labels]).to(device)
+    loss_func = nn.CrossEntropyLoss()#weight=weight)
     
-    metric_func = balanced_accuracy_score
+    metric_func = accuracy_score#balanced_accuracy_score
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     best_score, best_epoch = 0., 0
@@ -53,7 +52,7 @@ def run_training(args, model, data):
     for epoch in range(args.epochs):
         train_losses = train(model, train_loader, loss_func, optimizer, device)
         val_losses, val_score = evaluate(model, val_loader, loss_func, metric_func, device)
-        print(f'Epoch: {epoch:02d} | Train Loss: {train_losses:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f}')
+        print(f'Epoch: {epoch:02d} | Train Loss: {train_losses:.3f} | Val Loss: {val_losses:.3f} | Val Av Acc: {val_score:.3f}')
         if val_score > best_score:
             best_score = val_score
             best_epoch = epoch
@@ -61,7 +60,7 @@ def run_training(args, model, data):
         if epoch - best_epoch > args.early_stop_epoch:
             break       
 
-    print(f'Best Epoch: {best_epoch:02d} | Val Loss: {best_score:.3f}')
+    print(f'Best Epoch: {best_epoch:02d} | Best Val Av Acc: {best_score:.3f}')
 
     # save
     if args.save_best_model:
@@ -101,7 +100,7 @@ def evaluate(model, val_loader, loss_func, metric_func, rank):
             X, y = X.unsqueeze(1).double().to(rank), y.long().to(rank)
             out = model(X)
             loss = loss_func(out, y)
-            print("out:",out)
+            #print("out:",out)
             pred = torch.argmax(out, dim=1)
             loss_total += loss.item() * X.size(0)
             count += X.size(0)
@@ -109,8 +108,8 @@ def evaluate(model, val_loader, loss_func, metric_func, rank):
             y_true += y.tolist()
         val_losses = loss_total/count
         val_score = metric_func(y_pred, y_true)
-        print(y_pred)
-        print(y_true)
+        #print(y_pred)
+        #print(y_true)
     return val_losses, val_score
 
 def predict(model, test_loader, loss_func, metric_func, rank):
