@@ -42,7 +42,7 @@ def main():
     if args.mode == 'train':
         set_seed(args.seed)
         X, y, _ = load_data(args.data_path, 'sim', args.num_classes)
-        model = ARPESNet(num_classes=args.num_classes, dropout=args.dropout)
+        model = ARPESNet(num_classes=args.num_classes, dropout=args.dropout, normalize=True)
         run_training(args, model, (X, y))
         # test on exp data
         # load exp data
@@ -50,8 +50,8 @@ def main():
         x_exp_2015, y_exp_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
         # dataloader for exp data
         exp_2014_pred_all, exp_2015_pred_all = [], []
-        exp_2014_dataset = ARPESDataset(x_exp_2014, y_exp_2014)
-        exp_2015_dataset = ARPESDataset(x_exp_2015, y_exp_2015)
+        exp_2014_dataset = ARPESDataset(x_exp_2014, y_exp_2014, normalize=True)
+        exp_2015_dataset = ARPESDataset(x_exp_2015, y_exp_2015, normalize=True)
         exp_2014_loader = DataLoader(exp_2014_dataset, batch_size=len(y_exp_2014))
         exp_2015_loader = DataLoader(exp_2015_dataset, batch_size=len(y_exp_2015))
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

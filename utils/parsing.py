@@ -7,19 +7,17 @@ def parse_args():
     parser.add_argument('--save_best_model', type=bool, default=True)
     parser.add_argument('--checkpoint_path', type=str, default='./models/')
     parser.add_argument("--seed", type=int, default=42, help="seed")
-    parser.add_argument('--mode', type=str, default='train') # train, predict
+    parser.add_argument('--mode', type=str, default='cross_validation_predict') # train, predict
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--dataset_name', type=str, default='exp_2015')
-    parser.add_argument('--num_classes', type=int, default=3)
+    parser.add_argument('--num_classes', type=int, default=2)
     parser.add_argument('--split', type=list, default=[0.8, 0.1, 0.1])
     parser.add_argument('--num_folds', type=int, default=10)
 
     parser.add_argument("--lr", type=float, default=2e-4, help="learning rate")
-    parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
+    parser.add_argument("--epochs", type=int, default=400, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--early_stop_epoch", type=int, default=200)
-
-    
 
     parser.add_argument('--hidden_channels', type=int, default=32)
     parser.add_argument('--dropout', type=float, default=0.)
