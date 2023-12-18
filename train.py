@@ -61,7 +61,7 @@ def run_training(args, model, data_source, data_target):
     for epoch in range(args.epochs):
         train_losses = train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, device)
         val_losses, val_score = evaluate(model, val_loader, target_loader, loss_func, metric_func, device)
-        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Av Acc: {val_score:.3f}")
+        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f}")
        
         if val_losses < best_val_loss:
             best_score = val_score
