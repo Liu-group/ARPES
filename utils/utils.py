@@ -48,6 +48,7 @@ def load_checkpoint(args):
     """
     save_path = os.path.join(args.checkpoint_path, str(args.seed) + '_model.pt')
     assert os.path.exists(save_path), "Checkpoint not found"
+    print('Loading checkpoint from: ' + save_path)
     if args.gpu is not None:
         state = torch.load(save_path )
     else:

@@ -13,7 +13,7 @@ class ARPESDataset(VisionDataset):
         ):
         super().__init__(root=None, transform=transform)
         self.data, self.targets = data, targets
-        self.normalize = normalize
+        self.if_normalize = normalize
         self.mean = np.mean(self.data, axis=0)
         self.std = np.std(self.data, axis=0)
         self.max = np.max(self.data, axis=0)
@@ -30,11 +30,10 @@ class ARPESDataset(VisionDataset):
             X = self.transform(X).squeeze(0)
         if self.target_transform is not None:
             y = self.target_transform(self.targets[index])
-        if self.normalize:
+        if self.if_normalize:
             return self.normalize(X), y, index
         else:
             return X, y, index
-        #return self.standardize(X), y, index
     
     def __len__(self):
         return len(self.data)
