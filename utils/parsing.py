@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument('--factor', type=float, default=0.9, help="factor for lr scheduler")
     parser.add_argument('--patience', type=int, default=10, help="patience for lr scheduler")
     parser.add_argument('--min_lr', type=int, default=1e-7, help="minimum learning rate")
-    parser.add_argument('--adaptation', type=int, default=0.8, help="adaptation factor")
+    parser.add_argument('--adaptation', type=float, default=0.8, help="adaptation factor")
 
     parser.add_argument('--hidden_channels', type=int, default=32)
     parser.add_argument('--dropout', type=float, default=0.)
