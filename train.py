@@ -26,17 +26,17 @@ def get_data_split(args, y):
 def run_training(args, model, data_source, data_target):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_source, y_source = data_source
-    X_target, _ = data_target
+    X_2014, X_2015 = data_target
     idx_train, idx_val, idx_test = get_data_split(args, y_source)
-    transform = transforms.Compose([transforms.ToTensor(),
-                                    #RandomRotation(degrees=(0, 90)),
-                                    RandomAffine(degrees=0, 
-                                                translate=(args.trf,args.trf), 
-                                                scale=(args.scalef,  1/args.scalef),
-                                                interpolation=transforms.InterpolationMode.BILINEAR),
-                                    AddGaussianNoise(0., 0.25)])
+    transform_sim = transforms.Compose([transforms.ToTensor(),
+                                    Normalize((1.000,), (2.517)),
+                                    ])
+    transform_2014 = transforms.Compose([transforms.ToTensor(),
+                                    Normalize((1.000,), (1.754))])
+    transform_2015 = transforms.Compose([transforms.ToTensor(),
+                                    Normalize((1.000,), (1.637))])
     # source data loader
-    source_dataset = ARPESDataset(X_source, y_source, transform=transform)
+    source_dataset = ARPESDataset(X_source, y_source, transform=transform_sim)
     train_dataset = torch.utils.data.Subset(source_dataset, idx_train)
     val_dataset = torch.utils.data.Subset(source_dataset, idx_val)
     test_dataset = torch.utils.data.Subset(source_dataset, idx_test)
@@ -45,7 +45,12 @@ def run_training(args, model, data_source, data_target):
     test_loader = DataLoader(test_dataset, batch_size=len(idx_test), shuffle=False)
 
     # target data loader
-    target_dataset = ARPESDataset(X_target, _, transform=transform)
+    target_2014 = ARPESDataset(X_2014, transform=transform_2014)
+    target_2015 = ARPESDataset(X_2015, transform=transform_2015)
+    print(f'Target 2014 dataset size: {len(target_2014)}')
+    print(f'Target 2015 dataset size: {len(target_2015)}')
+    #target_dataset = ARPESDataset(X_2014, _, transform=transform_2014 if args.adv_on=='exp_2014' else transform_2015)
+    target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
     target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
     
     #num_labels = np.bincount(train_dataset.targets)
@@ -56,14 +61,15 @@ def run_training(args, model, data_source, data_target):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.factor, patience=args.patience, min_lr=args.min_lr)
 
-    best_val_loss, best_epoch = 1e10, 0
+    best_val_loss, best_epoch, best_score = 1e10, 0, 0
     model = model.to(device)
     for epoch in range(args.epochs):
         train_losses = train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, device)
         val_losses, val_score = evaluate(model, val_loader, target_loader, loss_func, metric_func, device)
         print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f}")
-       
-        if val_losses < best_val_loss:
+
+        if args.opt_goal=='accuracy' and val_score > best_score \
+        or args.opt_goal=='val_loss' and val_losses < best_val_loss:
             best_score = val_score
             best_val_loss = val_losses
             best_epoch = epoch
@@ -76,19 +82,21 @@ def run_training(args, model, data_source, data_target):
     # save
     if args.save_best_model:
         save_path = os.path.join(args.checkpoint_path, str(args.seed) + '_model.pt')
-        torch.save({"full_model": best_model, "state_dict": model.state_dict(), "args": args}, save_path)
+        torch.save({"full_model": best_model, "state_dict": best_model.state_dict(), "args": args}, save_path)
         print('Saved the best model as ' + save_path)
 
     # visualize
     if args.visualize:
-        vis_model = copy.deepcopy(model)
-        visualize(args, vis_model)
+        vis_model_0 = copy.deepcopy(best_model)
+        visualize(args, vis_model_0)
+        vis_model_1 = copy.deepcopy(model)
+        visualize(args, vis_model_1)
 
-    test_losses, test_score, y_true, y_pred = predict(model, test_loader, loss_func, metric_func, device)
+    test_losses, test_score, y_true, y_pred = predict(best_model, test_loader, loss_func, metric_func, device)
     print(f'Test Loss: {test_losses:.3f} | Test Acc: {test_score:.3f}')
     print(classification_report(y_true, y_pred, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
     print(confusion_matrix(y_true, y_pred))
-    return test_score
+    return best_model, test_score
 
 def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, rank):
     model.train()
@@ -100,7 +108,6 @@ def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer,
     while i < len_dataloader:
         p = float(i + epoch * len_dataloader) / args.epochs / len_dataloader
         alpha = 2. / (1. + np.exp(-10 * p)) - 1
-
         # training model using source data
         data_source = data_source_iter.next()
         s_img, s_label, _ = data_source
@@ -119,10 +126,9 @@ def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer,
         class_output, domain_output = model(input_img, alpha)
         err_s_label = loss_func(class_output, class_label)
         err_s_domain = loss_func(domain_output, domain_label)
-
         # training model using target data
         data_target = data_target_iter.next()
-        t_img, _, _ = data_target
+        t_img, _ = data_target
         t_img = t_img.unsqueeze(1).to(rank)
         batch_size = len(t_img)
 
@@ -171,7 +177,7 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
             y_true += y.tolist()
         
         for data_target in target_loader:
-            X, _, _ = data_target
+            X, _ = data_target
             X = X.unsqueeze(1).double().to(rank)
             batch_size = X.size(0)
             domain_label = torch.ones(batch_size).long().to(rank)

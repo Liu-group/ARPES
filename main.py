@@ -63,12 +63,15 @@ def main():
             args.seed = init_seed + fold_num
             set_seed(args.seed)
             X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
-            X_target, y_target, _ = load_data(args.data_path, args.adv_on, args.num_classes)
-            model = ARPESNet(num_classes=args.num_classes, dropout=args.dropout)
-            run_training(args, model, (X_source, y_source), (X_target, _))
+            X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
+            X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
+            model = ARPESNet(num_classes=args.num_classes,
+                            hidden_channels=args.hidden_channels, 
+                            dropout=args.dropout)
+            best_model, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
             # y_exp_2014, y_exp_2015 are always the same at each fold
-            y_pred_2014, y_exp_2014 = test_exp(args, 'exp_2014', model)
-            y_pred_2015, y_exp_2015 =  test_exp(args, 'exp_2015', model)
+            y_pred_2014, y_exp_2014 = test_exp(args, 'exp_2014', best_model)
+            y_pred_2015, y_exp_2015 =  test_exp(args, 'exp_2015', best_model)
             exp_2014_pred_all.append(y_pred_2014)
             exp_2015_pred_all.append(y_pred_2015)
         # get mean and std of accuracy, precision, recall, f1-score
@@ -86,11 +89,14 @@ def main():
     if args.mode == 'adv_train':
         set_seed(args.seed)
         X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
-        X_target, y_target, _ = load_data(args.data_path, args.adv_on, args.num_classes)
-        model = ARPESNet(num_classes=args.num_classes, dropout=args.dropout)
-        run_training(args, model, (X_source, y_source), (X_target, _))
-        test_exp(args, 'exp_2014')
-        test_exp(args, 'exp_2015')
+        X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
+        X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
+        model = ARPESNet(num_classes=args.num_classes,
+                         hidden_channels=args.hidden_channels, 
+                         dropout=args.dropout)
+        best_model, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
+        test_exp(args, 'exp_2014', best_model)
+        test_exp(args, 'exp_2015', best_model)
     if args.mode == 'predict':
         set_seed(args.seed)
         test_exp(args, 'exp_2014')

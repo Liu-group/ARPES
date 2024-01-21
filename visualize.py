@@ -7,6 +7,7 @@ import torch
 from utils.utils import load_checkpoint
 from utils.parsing import parse_args
 import time
+
 def plot_tsne(X, y, save_path, classification):
     X_embedded = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=0).fit_transform(X)
     fig, ax = plt.subplots()
@@ -82,7 +83,8 @@ def visualize(args, model):
     plot_tsne(inputs, domain_label_all, f'visualization/{time}_{args.seed}_domian_tsne.png', classification=False)
     plot_tsne(inputs, class_label_all, f'visualization/{time}_{args.seed}_class_tsne.png', classification=True)
 
-
+    del model    
+    
 if __name__ == '__main__':
     args = parse_args()
     print(args)
