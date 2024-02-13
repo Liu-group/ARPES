@@ -7,19 +7,35 @@ import torch
 from utils.utils import load_checkpoint
 from utils.parsing import parse_args
 import time
+plt.rcParams['pdf.fonttype'] = 'truetype'
+#plt.rcParams['font.family'] = 'Helvetica'
+plt.rcParams["font.size"] = 8
+plt.rcParams["font.weight"] = "bold"
+plt.rcParams["axes.labelweight"] = "bold"
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['ytick.direction'] = 'in'
+plt.rcParams.update({
+    "pdf.use14corefonts": True
+})
 
 def plot_tsne(X, y, save_path, classification):
-    X_embedded = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=0).fit_transform(X)
-    fig, ax = plt.subplots()
-    scatter = ax.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y, cmap='tab10', s=5)
+    X_embedded = TSNE(n_components=2, perplexity=20, n_iter=1000, random_state=0).fit_transform(X)
+    fig, ax = plt.subplots(figsize=(3.3, 3.3))
     # produce a legend with the unique colors from the scatter
     if classification:
-        labels = ['class 0', 'class 1', 'class 2']
+        labels = ['non-SC', 'fluc-SC', 'SC']
+        cmap = 'Accent'
     else:
-        labels=['sim', 'exp_2014', 'exp_2015']
-    plt.legend(handles=scatter.legend_elements()[0], labels=labels)
-    ax.set_title(save_path.split('/')[-1].split('.')[0])
-    fig.savefig(save_path, bbox_inches='tight')
+        labels=['sim', 'BSCCO OD58', 'BSCCO OD50']
+        cmap = 'tab10'
+    scatter = ax.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y, cmap=cmap, s=10, edgecolors='black',linewidths=0.1, alpha=0.9)
+    plt.legend(handles=scatter.legend_elements()[0], labels=labels, loc='upper right', fontsize=5)
+    #ax.set_title(save_path.split('/')[-1].split('.')[0])
+    # remove the ticks
+    ax.tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False, right=False, left=False, labelleft=False)
+    
+    fig.savefig(save_path+'.pdf', format = 'pdf', bbox_inches='tight', dpi=300)
+    fig.savefig(save_path+'.png', format = 'png', bbox_inches='tight', dpi=300)
     print("Saved to ", save_path)
     plt.show()
     plt.close(fig)
@@ -70,7 +86,7 @@ def visualize(args, model):
         for data in loader_all:
             X, _, _ = data
             X = X.unsqueeze(1).double().to(device)
-            out, _ = model(X, alpha=0)
+            out = model(X, alpha=0)
 
 
     inputs = [i for sub in inputs for i in sub]
@@ -80,12 +96,13 @@ def visualize(args, model):
     print("Number of features: ", inputs.shape[1])
     from datetime import datetime
     time = datetime.now().strftime('%m-%d-%H:%M')
-    plot_tsne(inputs, domain_label_all, f'visualization/{time}_{args.seed}_domian_tsne.png', classification=False)
-    plot_tsne(inputs, class_label_all, f'visualization/{time}_{args.seed}_class_tsne.png', classification=True)
+    plot_tsne(inputs, domain_label_all, f'visualization/{time}_{args.seed}_domain_tsne', classification=False)
+    plot_tsne(inputs, class_label_all, f'visualization/{time}_{args.seed}_class_tsne', classification=True)
 
     del model    
     
 if __name__ == '__main__':
+    torch.set_default_tensor_type(torch.DoubleTensor)
     args = parse_args()
     print(args)
     model = load_checkpoint(args)

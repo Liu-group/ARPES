@@ -7,12 +7,13 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-from torchvision.transforms import RandomAffine, RandomRotation, Normalize
-from utils.utils import AddGaussianNoise
+from torchvision.transforms import Normalize
+from utils.utils import load_checkpoint
 from dataset import ARPESDataset
 from torch.utils.data import DataLoader
 import collections
 from visualize import visualize
+from transfer_score import get_transfer_score
 
 def get_data_split(args, y):
     idx_all = np.arange(len(y))
@@ -45,43 +46,63 @@ def run_training(args, model, data_source, data_target):
     test_loader = DataLoader(test_dataset, batch_size=len(idx_test), shuffle=False)
 
     # target data loader
-    target_2014 = ARPESDataset(X_2014, transform=transform_2014)
-    target_2015 = ARPESDataset(X_2015, transform=transform_2015)
-    print(f'Target 2014 dataset size: {len(target_2014)}')
-    print(f'Target 2015 dataset size: {len(target_2015)}')
-    #target_dataset = ARPESDataset(X_2014, _, transform=transform_2014 if args.adv_on=='exp_2014' else transform_2015)
-    target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
-    target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
-    
+    if args.adv_on == 'both':
+        target_2014 = ARPESDataset(X_2014, transform=transform_2014)
+        target_2015 = ARPESDataset(X_2015, transform=transform_2015)
+        target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
+        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
+    elif args.adv_on == 'exp_2014':
+        target_dataset = ARPESDataset(X_2014, transform=transform_2014)
+        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
+    else:
+        target_dataset = ARPESDataset(X_2015, transform=transform_2015)
+        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
+    print('Target data size: ', len(target_dataset))
+        
     #num_labels = np.bincount(train_dataset.targets)
     #weight = torch.tensor([(1 / i) * (num_labels.sum() / 2.0) for i in num_labels]).to(device)
     loss_func = nn.CrossEntropyLoss()#weight=weight)
     
     metric_func = accuracy_score#balanced_accuracy_score
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.factor, patience=args.patience, min_lr=args.min_lr)
+    #optimizer = optim.Adam([
+        #{'params': model.convs.parameters()},
+       #{'params': model.domain_classifier.parameters(), 'lr':1e-3}, 
+        #{'params': model.class_classifier.parameters(), 'lr': 1e-3},
+        #], lr=args.lr, weight_decay=args.weight_decay)
+    #print(optimizer)
+    #optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
 
-    best_val_loss, best_epoch, best_score = 1e10, 0, 0
+    best_val_loss, best_epoch, best_score = float('inf'), 0, -float('inf')
     model = model.to(device)
     for epoch in range(args.epochs):
         train_losses = train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, device)
         val_losses, val_score = evaluate(model, val_loader, target_loader, loss_func, metric_func, device)
-        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f}")
 
-        if args.opt_goal=='accuracy' and val_score > best_score \
-        or args.opt_goal=='val_loss' and val_losses < best_val_loss:
-            best_score = val_score
+        if args.opt_goal=='ts':
+            ts_model = copy.deepcopy(model)
+            ts_target_loader = DataLoader(target_dataset, batch_size=len(target_dataset), shuffle=True)
+            target_iter = iter(ts_target_loader)
+            ts = get_transfer_score(target_iter, ts_model, args.num_classes, device)
+            del ts_model, ts_target_loader, target_iter
+        else:
+            ts = 0
+        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f} | ts: {ts:.3f}")
+
+        if args.opt_goal=='accuracy' and val_score >= best_score \
+        or args.opt_goal=='val_loss' and val_losses <= best_val_loss \
+        or args.opt_goal=='ts' and ts >= best_score:
+            best_score = val_score if args.opt_goal=='accuracy' else ts
             best_val_loss = val_losses
             best_epoch = epoch
             best_model = copy.deepcopy(model)
         if epoch - best_epoch > args.early_stop_epoch:
             break       
-        scheduler.step(val_losses)
 
-    print(f"Best Epoch: {best_epoch:02d} | Best Val Acc: {best_score:.3f}")
+    print(f"Best Epoch: {best_epoch:02d} | Best {args.opt_goal}: {best_score:.3f}")
     # save
     if args.save_best_model:
-        save_path = os.path.join(args.checkpoint_path, str(args.seed) + '_model.pt')
+        save_path = os.path.join(args.checkpoint_path, str(args.num_classes) + '_' + str(args.seed) + f'_model_{args.adaptation}.pt')
         torch.save({"full_model": best_model, "state_dict": best_model.state_dict(), "args": args}, save_path)
         print('Saved the best model as ' + save_path)
 
@@ -89,14 +110,13 @@ def run_training(args, model, data_source, data_target):
     if args.visualize:
         vis_model_0 = copy.deepcopy(best_model)
         visualize(args, vis_model_0)
-        vis_model_1 = copy.deepcopy(model)
-        visualize(args, vis_model_1)
-
-    test_losses, test_score, y_true, y_pred = predict(best_model, test_loader, loss_func, metric_func, device)
+    
+    test_losses, test_score, y_true, y_pred = predict(model, test_loader, loss_func, metric_func, device)
     print(f'Test Loss: {test_losses:.3f} | Test Acc: {test_score:.3f}')
-    print(classification_report(y_true, y_pred, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
+    print(classification_report(y_true, y_pred, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1'], zero_division=0))
     print(confusion_matrix(y_true, y_pred))
-    return best_model, test_score
+
+    return best_model, test_score, best_score
 
 def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, rank):
     model.train()
@@ -181,7 +201,7 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
             X = X.unsqueeze(1).double().to(rank)
             batch_size = X.size(0)
             domain_label = torch.ones(batch_size).long().to(rank)
-            _, domain_output = model(X, alpha=1)
+            class_output, domain_output = model(X, alpha=1)
             loss = loss_func(domain_output, domain_label)
             target_loss_total += loss.item() * X.size(0)
             target_count += X.size(0)
@@ -193,13 +213,14 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
 
 def predict(model, test_loader, loss_func, metric_func, rank):
     model.eval()
+    model.prediction_mode = True
     y_pred, y_true = [], []
     count, loss_total = 0, 0.0
     with torch.no_grad():
         for data in test_loader:
             X, y, _ = data
             X, y = X.unsqueeze(1).double().to(rank), y.long().to(rank)
-            out, _ = model(X, alpha=0)
+            out = model(X, alpha=0)
             loss = loss_func(out, y)
             pred = torch.argmax(out, dim=1)
             loss_total += loss.item() * X.size(0)

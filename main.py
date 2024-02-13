@@ -1,31 +1,17 @@
 
 import numpy as np
-import random
 import copy
 import torch
 from utils.parsing import parse_args
+from utils.utils import load_checkpoint, set_seed   
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import torch.nn as nn
 from model import ARPESNet
 from train import run_training, predict
 from dataset import ARPESDataset
-from utils.utils import load_checkpoint
 from typing import Optional
-
 torch.set_default_tensor_type(torch.DoubleTensor)
-
-def set_seed(seed=42):
-    """Sets initial seed for random numbers."""
-    # set random seed for torch
-    random.seed(seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
 
 def load_data(data_path, name, num_classes):
     x = np.load(data_path + '/data_' + name + '_processed_nobg.npy')
@@ -57,7 +43,9 @@ def main():
     print(args)
     if args.mode == 'cross_val_adv_train':
         init_seed = args.seed
+        tss = []
         exp_2014_pred_all, exp_2015_pred_all = [], []
+        exp_2014_acc_all, exp_2015_acc_all = [], []
         for fold_num in range(args.num_folds):
             print(f'Fold {fold_num}')
             args.seed = init_seed + fold_num
@@ -68,12 +56,15 @@ def main():
             model = ARPESNet(num_classes=args.num_classes,
                             hidden_channels=args.hidden_channels, 
                             dropout=args.dropout)
-            best_model, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
+            best_model, _, ts = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
             # y_exp_2014, y_exp_2015 are always the same at each fold
             y_pred_2014, y_exp_2014 = test_exp(args, 'exp_2014', best_model)
             y_pred_2015, y_exp_2015 =  test_exp(args, 'exp_2015', best_model)
             exp_2014_pred_all.append(y_pred_2014)
             exp_2015_pred_all.append(y_pred_2015)
+            tss.append(ts)
+            exp_2014_acc_all.append(accuracy_score(y_exp_2014, y_pred_2014))
+            exp_2015_acc_all.append(accuracy_score(y_exp_2015, y_pred_2015))
         # get mean and std of accuracy, precision, recall, f1-score
         exp_2014_pred_all = np.array(exp_2014_pred_all)
         print("exp_2014_pred_all.shape",exp_2014_pred_all.shape)
@@ -85,6 +76,9 @@ def main():
         print('Exp_2015')
         print(classification_report(y_exp_2015, np.mean(exp_2015_pred_all, axis=0).round(), target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
         print(confusion_matrix(y_exp_2015, np.mean(exp_2015_pred_all, axis=0).round()))
+        print('Exp_2014 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2014_acc_all), np.std(exp_2014_acc_all)))
+        print('Exp_2015 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2015_acc_all), np.std(exp_2015_acc_all)))
+        print('Transfer Score: {:.3f} ± {:.3f}'.format(np.mean(tss), np.std(tss)))
         print(model)
     if args.mode == 'adv_train':
         set_seed(args.seed)
@@ -94,9 +88,10 @@ def main():
         model = ARPESNet(num_classes=args.num_classes,
                          hidden_channels=args.hidden_channels, 
                          dropout=args.dropout)
-        best_model, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
+        best_model, _, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
         test_exp(args, 'exp_2014', best_model)
         test_exp(args, 'exp_2015', best_model)
+        print(model)
     if args.mode == 'predict':
         set_seed(args.seed)
         test_exp(args, 'exp_2014')
