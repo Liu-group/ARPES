@@ -20,7 +20,8 @@ def get_data_split(args, y):
     train_ratio, val_ratio, test_ratio = args.split[0], args.split[1], args.split[2] 
 
     idx_train, idx_test = train_test_split(idx_all, test_size=test_ratio, random_state=42, stratify=y)
-    idx_train, idx_val = train_test_split(idx_train, test_size=val_ratio, random_state=42, stratify=y[idx_train])
+    # idx_train, idx_val = train_test_split(idx_train, test_size=val_ratio, random_state=42, stratify=y[idx_train])
+    idx_train, idx_val = train_test_split(idx_train, train_size=train_ratio/(1-test_ratio) , test_size=val_ratio/(1-test_ratio), random_state=42, stratify=y[idx_train])
 
     return idx_train, idx_val, idx_test
 

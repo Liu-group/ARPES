@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--dataset_name', type=str, default='exp_2015')
     parser.add_argument('--num_classes', type=int, default=2)
-    parser.add_argument('--split', type=list, default=[0.8, 0.1, 0.1])
+    parser.add_argument('--split', type=float, nargs='+', default=[0.8, 0.1, 0.1])
     parser.add_argument('--num_folds', type=int, default=10)
     parser.add_argument('--visualize', type=bool, default=False)
 
