@@ -20,10 +20,7 @@ def load_checkpoint(args):
     """
     Loads a model checkpoint.
     """
-    if args.checkpoint_path == './checkpoint/':
-        save_path = os.path.join(args.checkpoint_path, str(args.num_classes) + '_' + str(args.seed) + f'_model_{args.adaptation}.pt')
-    else:
-        save_path = os.path.join(args.checkpoint_path, str(args.num_classes) + '_' + str(args.seed) + '_model.pt')
+    save_path = os.path.join(args.checkpoint_path, str(args.num_classes) + '_' + str(args.seed) + f'_model_{args.adaptation}.pt')
     assert os.path.exists(save_path), f"Checkpoint {save_path} not found"
     print('Loading checkpoint from: ' + save_path)
     if args.gpu is not None:
