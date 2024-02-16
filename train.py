@@ -68,12 +68,12 @@ def run_training(args, model, data_source, data_target):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     #optimizer = optim.Adam([
         #{'params': model.convs.parameters()},
-       #{'params': model.domain_classifier.parameters(), 'lr':1e-3}, 
+       #{'params': model.domain_classifier.parameters(), 'lr':args.lr/args.adaptation}, 
         #{'params': model.class_classifier.parameters(), 'lr': 1e-3},
         #], lr=args.lr, weight_decay=args.weight_decay)
     #print(optimizer)
     #optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
-
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.factor, patience=args.patience, min_lr=args.min_lr)
     best_val_loss, best_epoch, best_score = float('inf'), 0, -float('inf')
     model = model.to(device)
     for epoch in range(args.epochs):
@@ -99,7 +99,7 @@ def run_training(args, model, data_source, data_target):
             best_model = copy.deepcopy(model)
         if epoch - best_epoch > args.early_stop_epoch:
             break       
-
+        scheduler.step(ts)
     print(f"Best Epoch: {best_epoch:02d} | Best {args.opt_goal}: {best_score:.3f}")
     # save
     if args.save_best_model:
