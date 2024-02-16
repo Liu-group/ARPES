@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn import Sequential, Conv2d, Linear, BatchNorm2d, ReLU, MaxPool2d, Dropout, LeakyReLU
+from torch.nn import Sequential, Conv2d, Linear, BatchNorm2d, ReLU, MaxPool2d, Dropout, LeakyReLU, PReLU
 from functions import ReverseLayerF
 
 class ARPESNet(nn.Module): 
@@ -9,6 +9,7 @@ class ARPESNet(nn.Module):
                  num_classes: int = 3,
                  in_channels: int = 1,
                  hidden_channels=32,
+                 negative_slope=0.05,
                  dropout=0., 
                  fcw=50,  
                  kernel_size=3,
@@ -19,6 +20,7 @@ class ARPESNet(nn.Module):
             Conv2d(in_channels=in_channels, out_channels=hidden_channels, kernel_size=kernel_size, stride=1, padding=2),
             MaxPool2d(kernel_size=kernel_size, stride=2),
             LeakyReLU(),   
+            #PReLU(),
             Conv2d(in_channels=hidden_channels, out_channels=hidden_channels*2, kernel_size=kernel_size, stride=1, padding=2),
             MaxPool2d(kernel_size=kernel_size, stride=2),
             ReLU(),        
