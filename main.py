@@ -55,6 +55,7 @@ def main():
             X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
             model = ARPESNet(num_classes=args.num_classes,
                             hidden_channels=args.hidden_channels, 
+                            negative_slope=args.negative_slope,
                             dropout=args.dropout)
             best_model, _, ts = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
             # y_exp_2014, y_exp_2015 are always the same at each fold
@@ -87,6 +88,7 @@ def main():
         X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
         model = ARPESNet(num_classes=args.num_classes,
                          hidden_channels=args.hidden_channels, 
+                         negative_slope=args.negative_slope,
                          dropout=args.dropout)
         best_model, _, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
         test_exp(args, 'exp_2014', best_model)
