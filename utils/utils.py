@@ -3,6 +3,9 @@ import torch
 from model import ARPESNet
 import numpy as np
 import random
+from torchvision import transforms
+from torchvision.transforms import Normalize
+from sklearn.model_selection import train_test_split
 
 def set_seed(seed=42):
     """Sets initial seed for random numbers."""
@@ -37,3 +40,31 @@ def load_checkpoint(args):
         model = state["full_model"]
 
     return model
+
+def normalize_transform(name):
+    """
+    Normalizes the input tensor.
+    """
+    if name == 'sim':
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        Normalize((1.000,), (2.517)),
+                                        ])
+    elif name == 'exp_2014':
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        Normalize((1.000,), (1.754))
+                                        ])
+    else:
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        Normalize((1.000,), (1.637))
+                                        ])
+    return transform
+
+def get_partial_sample(X, y, ratio, stratify=True):
+    """
+    Returns a partial sample of the dataset.
+    """
+    if stratify:
+        idx, _ = train_test_split(np.arange(len(y)), test_size=1-ratio, random_state=42, stratify=y)
+    else:
+        idx = np.random.choice(len(y), int(len(y)*ratio), replace=False)
+    return X[idx], y[idx]

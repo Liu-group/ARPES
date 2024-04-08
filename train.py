@@ -6,9 +6,7 @@ import copy
 import os
 import numpy as np
 from sklearn.model_selection import train_test_split
-from torchvision import transforms
-from torchvision.transforms import Normalize
-from utils.utils import load_checkpoint
+from utils.utils import load_checkpoint, normalize_transform
 from dataset import ARPESDataset
 from torch.utils.data import DataLoader
 import collections
@@ -20,7 +18,6 @@ def get_data_split(args, y):
     train_ratio, val_ratio, test_ratio = args.split[0], args.split[1], args.split[2] 
 
     idx_train, idx_test = train_test_split(idx_all, test_size=test_ratio, random_state=42, stratify=y)
-    # idx_train, idx_val = train_test_split(idx_train, test_size=val_ratio, random_state=42, stratify=y[idx_train])
     idx_train, idx_val = train_test_split(idx_train, train_size=train_ratio/(1-test_ratio) , test_size=val_ratio/(1-test_ratio), random_state=42, stratify=y[idx_train])
 
     return idx_train, idx_val, idx_test
@@ -30,15 +27,9 @@ def run_training(args, model, data_source, data_target):
     X_source, y_source = data_source
     X_2014, X_2015 = data_target
     idx_train, idx_val, idx_test = get_data_split(args, y_source)
-    transform_sim = transforms.Compose([transforms.ToTensor(),
-                                    Normalize((1.000,), (2.517)),
-                                    ])
-    transform_2014 = transforms.Compose([transforms.ToTensor(),
-                                    Normalize((1.000,), (1.754))])
-    transform_2015 = transforms.Compose([transforms.ToTensor(),
-                                    Normalize((1.000,), (1.637))])
+    print("Number of sim training samples: ", len(idx_train))
     # source data loader
-    source_dataset = ARPESDataset(X_source, y_source, transform=transform_sim)
+    source_dataset = ARPESDataset(X_source, y_source, transform=normalize_transform('sim'))
     train_dataset = torch.utils.data.Subset(source_dataset, idx_train)
     val_dataset = torch.utils.data.Subset(source_dataset, idx_val)
     test_dataset = torch.utils.data.Subset(source_dataset, idx_test)
@@ -47,33 +38,16 @@ def run_training(args, model, data_source, data_target):
     test_loader = DataLoader(test_dataset, batch_size=len(idx_test), shuffle=False)
 
     # target data loader
-    if args.adv_on == 'both':
-        target_2014 = ARPESDataset(X_2014, transform=transform_2014)
-        target_2015 = ARPESDataset(X_2015, transform=transform_2015)
-        target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
-        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
-    elif args.adv_on == 'exp_2014':
-        target_dataset = ARPESDataset(X_2014, transform=transform_2014)
-        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
-    else:
-        target_dataset = ARPESDataset(X_2015, transform=transform_2015)
-        target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
+    target_2014 = ARPESDataset(X_2014, transform=normalize_transform('exp_2014'))
+    target_2015 = ARPESDataset(X_2015, transform=normalize_transform('exp_2015'))
+    target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
+    target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
     print('Target data size: ', len(target_dataset))
-        
-    #num_labels = np.bincount(train_dataset.targets)
-    #weight = torch.tensor([(1 / i) * (num_labels.sum() / 2.0) for i in num_labels]).to(device)
-    loss_func = nn.CrossEntropyLoss()#weight=weight)
     
-    metric_func = accuracy_score#balanced_accuracy_score
+    loss_func = nn.CrossEntropyLoss()
+    
+    metric_func = accuracy_score
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    #optimizer = optim.Adam([
-        #{'params': model.convs.parameters()},
-       #{'params': model.domain_classifier.parameters(), 'lr':args.lr/args.adaptation}, 
-        #{'params': model.class_classifier.parameters(), 'lr': 1e-3},
-        #], lr=args.lr, weight_decay=args.weight_decay)
-    #print(optimizer)
-    #optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.factor, patience=args.patience, min_lr=args.min_lr)
     best_val_loss, best_epoch, best_score = float('inf'), 0, -float('inf')
     model = model.to(device)
     for epoch in range(args.epochs):
@@ -99,7 +73,6 @@ def run_training(args, model, data_source, data_target):
             best_model = copy.deepcopy(model)
         if epoch - best_epoch > args.early_stop_epoch:
             break       
-        scheduler.step(ts)
     print(f"Best Epoch: {best_epoch:02d} | Best {args.opt_goal}: {best_score:.3f}")
     # save
     if args.save_best_model:
@@ -163,10 +136,10 @@ def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer,
         err.backward()
         optimizer.step()
         i += 1
-        total_losses['err_all'] += err.cpu().data.numpy()
-        total_losses['err_s_label'] += err_s_label.cpu().data.numpy()
-        total_losses['err_s_domain'] += err_s_domain.cpu().data.numpy()
-        total_losses['err_t_domain'] += err_t_domain.cpu().data.numpy()
+        total_losses['err_all'] += err.item()
+        total_losses['err_s_label'] += err_s_label.item()
+        total_losses['err_s_domain'] += err_s_domain.item()
+        total_losses['err_t_domain'] += err_t_domain.item()
 
     total_losses['err_all'] = total_losses['err_all']/len_dataloader
     total_losses['err_s_label'] = total_losses['err_s_label']/len_dataloader
@@ -212,10 +185,10 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
 
     return val_losses, val_score
 
-def predict(model, test_loader, loss_func, metric_func, rank):
+def predict(model, test_loader, loss_func, metric_func, rank, prob=False):
     model.eval()
     model.prediction_mode = True
-    y_pred, y_true = [], []
+    y_pred, y_true, prob = [], [], []
     count, loss_total = 0, 0.0
     with torch.no_grad():
         for data in test_loader:
@@ -223,6 +196,7 @@ def predict(model, test_loader, loss_func, metric_func, rank):
             X, y = X.unsqueeze(1).double().to(rank), y.long().to(rank)
             out = model(X, alpha=0)
             loss = loss_func(out, y)
+            prob.append(out.cpu().numpy())
             pred = torch.argmax(out, dim=1)
             loss_total += loss.item() * X.size(0)
             count += X.size(0)
@@ -230,4 +204,9 @@ def predict(model, test_loader, loss_func, metric_func, rank):
             y_true += y.tolist()            
         test_losses = loss_total/count
         test_score = metric_func(y_pred, y_true)
-    return test_losses, test_score, y_true, y_pred
+    
+    if prob==True:
+        prob = np.concatenate(prob)
+        return test_losses, test_score, y_true, prob
+    else:
+        return test_losses, test_score, y_true, y_pred
