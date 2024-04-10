@@ -5,10 +5,10 @@ def parse_args():
 
     parser.add_argument('--data_path', type=str, default='ARPESdata')
     parser.add_argument('--save_best_model', type=bool, default=True)
-    parser.add_argument('--checkpoint_path', type=str, default='./checkpoint/')#./checkpoint/./models/
-    parser.add_argument("--seed", type=int, default=51, help="seed")
-    parser.add_argument('--mode', type=str, default='cross_val_adv_train') # predict, adv_train, cross_val_adv_train
-    parser.add_argument('--adv_on', type=float, default=1.0, help='ratio of adversarial samples used')
+    parser.add_argument('--checkpoint_path', type=str, default='./models/')#./checkpoint/./models/
+    parser.add_argument("--seed", type=int, default=42, help="seed")
+    parser.add_argument('--mode', type=str, default='predict') # predict, adv_train, cross_val_adv_train
+    parser.add_argument('--adv_on', type=str, default='exp_2015', help='adversarial samples used')
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--dataset_name', type=str, default='exp_2015')
     parser.add_argument('--num_classes', type=int, default=2)
@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=4, help="batch size")
     parser.add_argument("--early_stop_epoch", type=int, default=25, help="early stop epoch")
-    parser.add_argument('--adaptation', type=float, default=1.5, help="adaptation factor")
+    parser.add_argument('--adaptation', type=float, default=0.5, help="adaptation factor")
 
     parser.add_argument('--hidden_channels', type=int, default=12)
     parser.add_argument('--negative_slope', type=float, default=0.01)

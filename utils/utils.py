@@ -53,9 +53,13 @@ def normalize_transform(name):
         transform = transforms.Compose([transforms.ToTensor(),
                                         Normalize((1.000,), (1.754))
                                         ])
-    else:
+    elif name == 'exp_2015':
         transform = transforms.Compose([transforms.ToTensor(),
                                         Normalize((1.000,), (1.637))
+                                        ])
+    else:
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        Normalize((1.000,), (1.699))
                                         ])
     return transform
 

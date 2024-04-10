@@ -25,7 +25,7 @@ def get_data_split(args, y):
 def run_training(args, model, data_source, data_target):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X_source, y_source = data_source
-    X_2014, X_2015 = data_target
+    X_target, _ = data_target
     idx_train, idx_val, idx_test = get_data_split(args, y_source)
     print("Number of sim training samples: ", len(idx_train))
     # source data loader
@@ -38,9 +38,7 @@ def run_training(args, model, data_source, data_target):
     test_loader = DataLoader(test_dataset, batch_size=len(idx_test), shuffle=False)
 
     # target data loader
-    target_2014 = ARPESDataset(X_2014, transform=normalize_transform('exp_2014'))
-    target_2015 = ARPESDataset(X_2015, transform=normalize_transform('exp_2015'))
-    target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
+    target_dataset = ARPESDataset(X_target, transform=normalize_transform(args.adv_on))
     target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
     print('Target data size: ', len(target_dataset))
     
