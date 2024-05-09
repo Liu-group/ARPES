@@ -20,7 +20,7 @@ plt.rcParams.update({
 })
 
 def plot_tsne(X, y, save_path, classification):
-    X_embedded = TSNE(n_components=2, perplexity=50, n_iter=5000, random_state=123).fit_transform(X)
+    X_embedded = TSNE(n_components=2, perplexity=100, n_iter=5000, random_state=123).fit_transform(X)
     fig, ax = plt.subplots(figsize=(3.3, 3.3))
     # produce a legend with the unique colors from the scatter
     if classification=='SC':
@@ -73,7 +73,7 @@ def visualize(args, model):
     print("number of exp_2014 samples: ", len(y_exp_2014))
     print("number of exp_2015 samples: ", len(y_exp_2015))
     domain_label_all = np.concatenate((np.array(class_sim).reshape(-1), np.array(class_2014).reshape(-1), np.array(class_2015).reshape(-1)), axis=0)
-    class_label_all = np.concatenate(( y_sim, y_exp_2014, y_exp_2015), axis=0)
+    class_label_all = np.concatenate((y_sim, y_exp_2014, y_exp_2015), axis=0)
     
     dataset_sim = ARPESDataset(x_sim, transform=normalize_transform('sim'))
     dataset_2014 = ARPESDataset(x_exp_2014, transform=normalize_transform('exp_2014'))
@@ -87,14 +87,13 @@ def visualize(args, model):
         inputs.append(input)
 
     #model.class_classifier[6].register_forward_hook(hook)
-    model.class_classifier[0].register_forward_hook(hook)
+    model.class_classifier.register_forward_hook(hook)
 
     with torch.no_grad():
         for data in loader_all:
             X, _ = data
             X = X.unsqueeze(1).double().to(device)
             out = model(X, alpha=0)
-
 
     inputs = [i for sub in inputs for i in sub]
     inputs = torch.cat(inputs)
@@ -107,6 +106,7 @@ def visualize(args, model):
     #plot_tsne(inputs, class_label_all, f'visualization/{time}_{args.seed}_class_tsne', classification='SC')
     domain_labels = np.concatenate((np.array(class_sim).reshape(-1),  np.array([[1]*(len(y_exp_2014)+len(y_exp_2015))]).reshape(-1)), axis=0)
     composite_labels = 2 * domain_labels + class_label_all
+    #print(class_label_all)
     plot_tsne(inputs, composite_labels, f'visualization/{time}_{args.seed}_composite', classification='comb')
     del model    
     

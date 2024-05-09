@@ -3,11 +3,11 @@ import numpy as np
 import copy
 import torch
 from utils.parsing import parse_args
-from utils.utils import load_checkpoint, set_seed, normalize_transform, get_partial_sample
+from utils.utils import load_checkpoint, set_seed, normalize_transform, get_num_sample
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import torch.nn as nn
-from model import ARPESNet
+from model import ARPESNet, ModelSoftmaxWrapper, EnsemblePredictor
 from train import run_training, predict
 from dataset import ARPESDataset
 from typing import Optional
@@ -45,26 +45,29 @@ def main():
         init_seed = args.seed
         tss = []
         tss, pred_all, acc_all = [], [], []
+        X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
+        if args.adv_on == 'exp_all':
+            X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
+            X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
+            X_target = np.concatenate((X_2014, X_2015), axis=0)
+            y_target = np.concatenate((y_2014, y_2015), axis=0)
+            if args.num_adv != 86:
+                X_target, y_target = get_num_sample(X_target, y_target, args.num_adv)
+        else:
+            X_target, y_target, _ = load_data(args.data_path, args.adv_on, args.num_classes)
+            if (args.num_adv != 41 and args.adv_on == 'exp_2015') or (args.num_adv != 45 and args.adv_on == 'exp_2014'):
+                X_target, y_target = get_num_sample(X_target, y_target, args.num_adv)        
         for fold_num in range(args.num_folds):
             print(f'Fold {fold_num}')
             args.seed = init_seed + fold_num
             set_seed(args.seed)
-            X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
-            if args.adv_on == 'exp_all':
-                X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
-                X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
-                X_target = np.concatenate((X_2014, X_2015), axis=0)
-                y_target = np.concatenate((y_2014, y_2015), axis=0)
-            else:
-                X_target, y_target, _ = load_data(args.data_path, args.adv_on, args.num_classes)
-   
             model = ARPESNet(num_classes=args.num_classes,
                             hidden_channels=args.hidden_channels, 
                             negative_slope=args.negative_slope,
-                            dropout=args.dropout)
-
+                            dropout=args.dropout,
+                            conditional=args.conditional,
+                            )
             best_model, _, ts = run_training(args, model, (X_source, y_source), (X_target, _))
-            # y_exp_2014, y_exp_2015 are always the same at each fold
             pred, y = test_exp(args, X_target, y_target, args.adv_on, best_model)
             pred_all.append(pred)
             tss.append(ts)
@@ -74,38 +77,26 @@ def main():
         print('{} Accuracy: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(acc_all), np.std(acc_all)))
         print('{} Transfer Score: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(tss), np.std(tss)))
         print(model)
-    if args.mode == 'adv_train':
-        set_seed(args.seed)
-        X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
-        X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
-        X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
-        model = ARPESNet(num_classes=args.num_classes,
-                         hidden_channels=args.hidden_channels, 
-                         negative_slope=args.negative_slope,
-                         dropout=args.dropout)
-        best_model, _, _ = run_training(args, model, (X_source, y_source), (X_2014, X_2015))
-        test_exp(args, 'exp_2014', best_model)
-        test_exp(args, 'exp_2015', best_model)
-        print(model)
+        
     if args.mode == 'predict':
-        from model import ModelSoftmaxWrapper, EnsemblePredictor
         set_seed(args.seed)
         ensemble = []
         exp_2014_acc_all, exp_2015_acc_all = [], []
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         for i in range(10):
             args.seed = 42 + i
-            
-            pred_2014, exp_2014 = test_exp(args, 'exp_2014')
-            pred_2015, exp_2015 =  test_exp(args, 'exp_2015')
+            X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
+            X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
+            pred_2014, exp_2014 = test_exp(args, X_2014, y_2014, 'exp_2014')
+            pred_2015, exp_2015 =  test_exp(args, X_2015, y_2015, 'exp_2015')
             exp_2014_acc_all.append(accuracy_score(exp_2014, pred_2014))
             exp_2015_acc_all.append(accuracy_score(exp_2015, pred_2015))
             model = load_checkpoint(args).to(device)
             softmax_model = ModelSoftmaxWrapper(model)
             ensemble.append(softmax_model)
         ensemble_predictor = EnsemblePredictor(ensemble, num_classes=args.num_classes, device=device)
-        y_pred_2014, y_exp_2014 = test_exp(args, 'exp_2014', ensemble_predictor)
-        y_pred_2015, y_exp_2015 =  test_exp(args, 'exp_2015', ensemble_predictor)
+        y_pred_2014, y_exp_2014 = test_exp(args, X_2014, y_2014, 'exp_2014',  ensemble_predictor)
+        y_pred_2015, y_exp_2015 =  test_exp(args, X_2015, y_2015, 'exp_2015', ensemble_predictor)
         print('Exp_2014 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2014_acc_all), np.std(exp_2014_acc_all)))
         print('Exp_2015 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2015_acc_all), np.std(exp_2015_acc_all)))
         print('Exp_2014 Ensemble')
@@ -114,9 +105,5 @@ def main():
         print('Exp_2015 Ensemble')
         print(classification_report(y_exp_2015, y_pred_2015, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
         print(confusion_matrix(y_exp_2015, y_pred_2015))
-
-        print('Exp_2014 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2014_acc_all), np.std(exp_2014_acc_all)))
-        print('Exp_2015 Accuracy: {:.3f} ± {:.3f}'.format(np.mean(exp_2015_acc_all), np.std(exp_2015_acc_all)))
-
 if __name__ == '__main__':
     main()

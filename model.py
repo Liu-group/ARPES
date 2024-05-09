@@ -14,6 +14,7 @@ class ARPESNet(nn.Module):
                  fcw=50,  
                  kernel_size=3,
                  prediction_mode = False,
+                 conditional = False,
                 ): 
         super().__init__()
         self.convs = Sequential(
@@ -36,14 +37,16 @@ class ARPESNet(nn.Module):
         self.dropout = Dropout(dropout)
         x = torch.empty(1, 1, 400, 195)
         out = self.convs(x)
-    
+        h = int((fcw*2/(hidden_channels//2))**0.5)
+        self.pool_layer = nn.AdaptiveAvgPool2d(output_size=(h, h))
+        out = self.pool_layer(out)
         h_shape = out.size()[1:]
         #h_shape: torch.Size([32, 50, 25])
         out = out.view(1, -1)
         out_dim = out.size(-1)
 
         self.domain_classifier = Sequential(
-            Linear(out_dim, fcw),
+            Linear(out_dim if conditional==False else out_dim*num_classes, fcw),
             ReLU(),
             self.dropout,
             nn.Linear(fcw, fcw),
@@ -60,19 +63,44 @@ class ARPESNet(nn.Module):
             self.dropout,
             nn.Linear(fcw, num_classes),
         )
+        self.conditional = conditional
+        self.map = MultiLinearMap()
 
     def forward(self, x, alpha=1.):
-        out = self.convs(x)
-        out = out.view(out.size(0), -1)
-        out = self.dropout(out)
-        reverse_x = ReverseLayerF.apply(out, alpha)
+        f = self.convs(x)
+        f = self.pool_layer(f)
+        f = f.view(f.size(0), -1)
+        f = self.dropout(f)
+        class_out = self.class_classifier(f)    
+        if self.conditional == True:
+            out = F.softmax(class_out, dim=1).detach()
+            f_domain = self.map(f, out)
+        else:
+            f_domain = f
+        reverse_x = ReverseLayerF.apply(f_domain, alpha)
         domain_out = self.domain_classifier(reverse_x)
-        class_out = self.class_classifier(out)
-
+        
         if self.prediction_mode:
             return class_out
         else:
             return class_out, domain_out
+
+class MultiLinearMap(nn.Module):
+    """Multi linear map
+
+    Shape:
+        - f: (minibatch, F)
+        - g: (minibatch, C)
+        - Outputs: (minibatch, F * C)
+    """
+
+    def __init__(self):
+        super(MultiLinearMap, self).__init__()
+
+    def forward(self, f: torch.Tensor, g: torch.Tensor) -> torch.Tensor:
+        batch_size = f.size(0)
+        output = torch.bmm(g.unsqueeze(2), f.unsqueeze(1))
+        return output.view(batch_size, -1)
 
 class ModelSoftmaxWrapper(nn.Module):
     def __init__(self, model):

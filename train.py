@@ -1,12 +1,13 @@
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, balanced_accuracy_score
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import copy
 import os
 import numpy as np
 from sklearn.model_selection import train_test_split
-from utils.utils import load_checkpoint, normalize_transform
+from utils.utils import load_checkpoint, normalize_transform, entropy, ForeverDataIterator
 from dataset import ARPESDataset
 from torch.utils.data import DataLoader
 import collections
@@ -54,17 +55,15 @@ def run_training(args, model, data_source, data_target):
 
         if args.opt_goal=='ts':
             ts_model = copy.deepcopy(model)
-            ts_target_loader = DataLoader(target_dataset, batch_size=len(target_dataset), shuffle=True)
-            target_iter = iter(ts_target_loader)
-            ts = get_transfer_score(target_iter, ts_model, args.num_classes, device)
-            del ts_model, ts_target_loader, target_iter
+            ts = get_transfer_score(target_dataset, ts_model, args.num_classes, device)
+            del ts_model
         else:
             ts = 0
-        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_s_domain']:.3f} | Train Target Domain Loss: {train_losses['err_t_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f} | ts: {ts:.3f}")
+        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f} | ts: {ts:.3f}")
 
-        if args.opt_goal=='accuracy' and val_score >= best_score \
-        or args.opt_goal=='val_loss' and val_losses <= best_val_loss \
-        or args.opt_goal=='ts' and ts >= best_score:
+        if args.opt_goal=='accuracy' and val_score > best_score \
+        or args.opt_goal=='val_loss' and val_losses < best_val_loss \
+        or args.opt_goal=='ts' and ts > best_score:
             best_score = val_score if args.opt_goal=='accuracy' else ts
             best_val_loss = val_losses
             best_epoch = epoch
@@ -92,9 +91,12 @@ def run_training(args, model, data_source, data_target):
 
 def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, rank):
     model.train()
-    len_dataloader = min(len(train_loader), len(target_loader))
-    data_source_iter = iter(train_loader)
-    data_target_iter = iter(target_loader)
+    if args.few == False:
+        len_dataloader = min(len(train_loader), len(target_loader))
+    else:
+        len_dataloader = len(train_loader)
+    data_source_iter = ForeverDataIterator(train_loader)
+    data_target_iter = ForeverDataIterator(target_loader)
     total_losses = collections.defaultdict(float)
     i = 0
     while i < len_dataloader:
@@ -111,13 +113,12 @@ def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer,
 
         input_img = torch.Tensor(batch_size, 1, 400, 195).to(rank)
         class_label = torch.LongTensor(batch_size).to(rank)
-        domain_label = torch.zeros(batch_size).long().to(rank)
+        s_domain_label = torch.zeros(batch_size).long().to(rank)
         input_img.resize_as_(s_img).copy_(s_img)
         class_label.resize_as_(s_label).copy_(s_label)
         
-        class_output, domain_output = model(input_img, alpha)
-        err_s_label = loss_func(class_output, class_label)
-        err_s_domain = loss_func(domain_output, domain_label)
+        s_class_output, s_domain_output = model(input_img, alpha)
+        err_s_label = loss_func(s_class_output, class_label)
         # training model using target data
         data_target = data_target_iter.next()
         t_img, _ = data_target
@@ -125,24 +126,31 @@ def train(args, epoch, model, train_loader, target_loader, loss_func, optimizer,
         batch_size = len(t_img)
 
         input_img = torch.Tensor(batch_size, 1, 400, 195).to(rank)
-        domain_label = torch.ones(batch_size).long().to(rank)
+        t_domain_label = torch.ones(batch_size).long().to(rank)
         input_img.resize_as_(t_img).copy_(t_img).to(rank)
 
-        _, domain_output = model(input_img, alpha)
-        err_t_domain = loss_func(domain_output, domain_label)
-        err = args.adaptation*(err_t_domain + err_s_domain) + err_s_label
+        t_class_output, t_domain_output = model(input_img, alpha)
+        domain_output = torch.cat((s_domain_output, t_domain_output), dim=0)
+        domain_label = torch.cat((s_domain_label, t_domain_label), dim=0)
+        if args.entropy_conditioning == True:
+            g = F.softmax(torch.cat((s_class_output, t_class_output), dim=0), dim=1).detach()
+            weight = 1.0 + torch.exp(-entropy(g))
+            weight = weight / torch.sum(weight) * len(weight)
+            err_domain = nn.CrossEntropyLoss(reduction='none')(domain_output, domain_label)
+            err_domain = torch.mean(err_domain * weight)
+        else: 
+            err_domain = loss_func(domain_output, domain_label)
+        err = args.adaptation * err_domain + err_s_label
         err.backward()
         optimizer.step()
         i += 1
         total_losses['err_all'] += err.item()
         total_losses['err_s_label'] += err_s_label.item()
-        total_losses['err_s_domain'] += err_s_domain.item()
-        total_losses['err_t_domain'] += err_t_domain.item()
+        total_losses['err_domain'] += err_domain.item()
 
     total_losses['err_all'] = total_losses['err_all']/len_dataloader
     total_losses['err_s_label'] = total_losses['err_s_label']/len_dataloader
-    total_losses['err_s_domain'] = total_losses['err_s_domain']/len_dataloader
-    total_losses['err_t_domain'] = total_losses['err_t_domain']/len_dataloader
+    total_losses['err_domain'] = total_losses['err_domain']/len_dataloader
     return total_losses
 
 def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
