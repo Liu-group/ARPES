@@ -1,3 +1,6 @@
+#################################################################
+# code adapted from https://github.com/sleepyseal/TransferScore #
+#################################################################
 from utils.parsing import parse_args
 from utils.utils import load_checkpoint, set_seed
 import torch
@@ -81,42 +84,3 @@ def get_transfer_score(target_dataset, model, num_classes, rank):
     score= H-sum(im_loss)/len(im_loss)/math.log(num_classes)
     del ts_target_loader, train_target_iter
     return score
-    
-if __name__ == "__main__":
-    args = parse_args()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # load exp data
-    num_classes = args.num_classes
-    data_path = args.data_path
-    X_2014 = np.load(data_path + '/data_' + 'exp_2014' + '_processed_nobg.npy')
-    y_2014 = np.load(data_path + '/data_' + 'exp_2014' + '_sc_values.npy').astype(int)
-    X_2015 = np.load(data_path + '/data_' + 'exp_2015' + '_processed_nobg.npy')
-    y_2015 = np.load(data_path + '/data_' + 'exp_2015' + '_sc_values.npy').astype(int)
-    if num_classes==2:
-        y_2014[y_2014==1]=0
-        y_2014[y_2014==2]=1
-        y_2015[y_2015==1]=0
-        y_2015[y_2015==2]=1
-    # dataloader for exp data
-    transform_2014 = transforms.Compose([transforms.ToTensor(),
-                                    Normalize((1.000,), (1.754))])
-    transform_2015 = transforms.Compose([transforms.ToTensor(),
-                                    Normalize((1.000,), (1.637))])
-
-    target_2014 = ARPESDataset(X_2014, transform=transform_2014)
-    target_2015 = ARPESDataset(X_2015, transform=transform_2015)
-    target_dataset = torch.utils.data.ConcatDataset([target_2014, target_2015])
-    target_loader = DataLoader(target_dataset, batch_size=len(y_2014)+len(y_2015), shuffle=True)
-
-    tcs = []
-    init_seed = args.seed
-    for fold_num in range(args.num_folds):
-        print(f'Fold {fold_num}')
-        args.seed = init_seed + fold_num
-        set_seed(args.seed)
-        model = load_checkpoint(args).to(device)
-        train_target_iter = iter(target_loader)
-        tc = get_transfer_score(train_target_iter, model, args.num_classes, device)
-        tcs.append(tc)
-        print(f'Transferability Coefficient: {tc:.3f}')
-    print('Transferability Coefficient: {:.3f} ± {:.3f}'.format(np.mean(tcs), np.std(tcs)))

@@ -157,7 +157,7 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
     model.eval()
     y_pred, y_true = [], []
     source_count, target_count = 0, 0
-    source_loss_total, target_loss_total = 0, 0.0
+    source_loss_total, source_loss_pred, target_loss_total = 0.0, 0.0, 0.0
     with torch.no_grad():
         for data_source in val_loader:
             X, y, _ = data_source
@@ -171,6 +171,7 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
             domain_loss = loss_func(domain_output, domain_label)
 
             pred = torch.argmax(class_output, dim=1)
+            source_loss_pred += class_loss.item() * X.size(0)
             source_loss_total += (class_loss.item() + domain_loss.item()) * X.size(0)
             source_count += X.size(0)
             y_pred += pred.tolist()
@@ -186,12 +187,12 @@ def evaluate(model, val_loader, target_loader, loss_func, metric_func, rank):
             target_loss_total += loss.item() * X.size(0)
             target_count += X.size(0)
 
-        val_losses = source_loss_total/source_count + target_loss_total/target_count
+        val_losses = source_loss_pred/source_count #+ target_loss_total/target_count
         val_score = metric_func(y_pred, y_true)
 
     return val_losses, val_score
 
-def predict(model, test_loader, loss_func, metric_func, rank, prob=False):
+def predict(model, test_loader, loss_func, metric_func, rank, show_prob=False):
     model.eval()
     model.prediction_mode = True
     y_pred, y_true, prob = [], [], []
@@ -210,9 +211,7 @@ def predict(model, test_loader, loss_func, metric_func, rank, prob=False):
             y_true += y.tolist()            
         test_losses = loss_total/count
         test_score = metric_func(y_pred, y_true)
-    
-    if prob==True:
+    if show_prob==True:
         prob = np.concatenate(prob)
-        return test_losses, test_score, y_true, prob
-    else:
-        return test_losses, test_score, y_true, y_pred
+        print(prob)
+    return test_losses, test_score, y_true, y_pred

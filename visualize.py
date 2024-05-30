@@ -8,6 +8,7 @@ import torch
 from utils.utils import load_checkpoint, normalize_transform
 from utils.parsing import parse_args
 import time
+
 plt.rcParams['pdf.fonttype'] = 'truetype'
 #plt.rcParams['font.family'] = 'Helvetica'
 plt.rcParams["font.size"] = 8

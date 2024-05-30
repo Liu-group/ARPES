@@ -25,6 +25,7 @@ def load_data(data_path, name, num_classes):
 def test_exp(args, x_exp, y_exp, name, model: Optional[nn.Module] = None):
     """ test on exp data """
     # dataloader for exp data
+    show_prob = True if model != None else False
     exp_dataset = ARPESDataset(x_exp, y_exp, transform=normalize_transform(name))
     exp_loader = DataLoader(exp_dataset, batch_size=len(y_exp), shuffle=False)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -34,14 +35,14 @@ def test_exp(args, x_exp, y_exp, name, model: Optional[nn.Module] = None):
         model = model.to(device)
     loss_func = nn.CrossEntropyLoss()
     metric_func = accuracy_score
-    test_losses, test_score, y_true, y_pred = predict(model, exp_loader, loss_func, metric_func, device)
+    test_losses, test_score, y_true, y_pred = predict(model, exp_loader, loss_func, metric_func, device, show_prob=show_prob)
     print(f'{name} Test Loss: {test_losses:.3f} | {name} Test Acc: {test_score:.3f}')
     return list(y_pred), list(y_true)
 
 def main():
     args = parse_args()
     print(args)
-    if args.mode == 'cross_val_adv_train':
+    if args.mode == 'train':
         init_seed = args.seed
         tss = []
         tss, pred_all, acc_all = [], [], []
@@ -66,6 +67,8 @@ def main():
                             negative_slope=args.negative_slope,
                             dropout=args.dropout,
                             conditional=args.conditional,
+                            pool_layer=args.pool_layer,
+                            fcw=args.fcw,
                             )
             best_model, _, ts = run_training(args, model, (X_source, y_source), (X_target, _))
             pred, y = test_exp(args, X_target, y_target, args.adv_on, best_model)

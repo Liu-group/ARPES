@@ -11,10 +11,11 @@ class ARPESNet(nn.Module):
                  hidden_channels=32,
                  negative_slope=0.01,
                  dropout=0., 
-                 fcw=50,  
+                 fcw=64,  
                  kernel_size=3,
                  prediction_mode = False,
                  conditional = False,
+                 pool_layer = True,
                 ): 
         super().__init__()
         self.convs = Sequential(
@@ -25,10 +26,10 @@ class ARPESNet(nn.Module):
             Conv2d(in_channels=hidden_channels, out_channels=hidden_channels*2, kernel_size=kernel_size, stride=1, padding=2),
             MaxPool2d(kernel_size=kernel_size, stride=2),
             ReLU(),        
-            Conv2d(in_channels=hidden_channels*2, out_channels=hidden_channels, kernel_size=kernel_size, stride=1, padding=2),
+            Conv2d(in_channels=hidden_channels*2, out_channels=hidden_channels*4, kernel_size=kernel_size, stride=1, padding=2),
             MaxPool2d(kernel_size=kernel_size, stride=2),
             ReLU(),
-            Conv2d(in_channels=hidden_channels, out_channels=hidden_channels//2, kernel_size=kernel_size, stride=1, padding=2),
+            Conv2d(in_channels=hidden_channels*4, out_channels=hidden_channels*4, kernel_size=kernel_size, stride=1, padding=2),
             MaxPool2d(kernel_size=kernel_size, stride=2),
             ReLU(),
             )
@@ -37,9 +38,11 @@ class ARPESNet(nn.Module):
         self.dropout = Dropout(dropout)
         x = torch.empty(1, 1, 400, 195)
         out = self.convs(x)
-        h = int((fcw*2/(hidden_channels//2))**0.5)
-        self.pool_layer = nn.AdaptiveAvgPool2d(output_size=(h, h))
-        out = self.pool_layer(out)
+        self.pool_layer = pool_layer
+        if pool_layer:
+            h = int((fcw*2/(hidden_channels//2))**0.5)
+            self.pool_layer = nn.AdaptiveAvgPool2d(output_size=(5, 5))
+            out = self.pool_layer(out)
         h_shape = out.size()[1:]
         #h_shape: torch.Size([32, 50, 25])
         out = out.view(1, -1)
@@ -68,7 +71,8 @@ class ARPESNet(nn.Module):
 
     def forward(self, x, alpha=1.):
         f = self.convs(x)
-        f = self.pool_layer(f)
+        if self.pool_layer:
+            f = self.pool_layer(f)
         f = f.view(f.size(0), -1)
         f = self.dropout(f)
         class_out = self.class_classifier(f)    

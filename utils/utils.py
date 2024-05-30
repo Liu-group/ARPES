@@ -35,6 +35,7 @@ def load_checkpoint(args):
         model = ARPESNet(num_classes=args.num_classes,
                          hidden_channels=args.hidden_channels, 
                          conditional=args.conditional,
+                         fcw=args.fcw,
                          prediction_mode=True,
                         )
         model.load_state_dict(state["state_dict"])
