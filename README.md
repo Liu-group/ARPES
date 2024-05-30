@@ -6,14 +6,15 @@ The traditional method of identifying symmetry-breaking phase transitions throug
 ## Dependencies
 The code was developed and tested on Python 3.10.10 using CUDA 11.4 with
 the following Python packages installed:
-- 'pytorch_cuda11.3_cudnn8.3.2==1.12.1'
-- 'torchvision==0.13.1'
-- 'scikit-learn==1.2.2'
-- 'captum==0.7.0'
-
+```
+pytorch            1.12.1
+torchvision        0.13.1
+scikit-learn       1.2.2
+captum             0.7.0
+```
 ## Usage
-First download the ARPES data from https://figshare.com/s/762454387fddddd0987a and create a folder for storing the processed ARPES. Then download/clone this repo and run:
-'''
-python main.py --data_path [processed_APRES_folder_path]
-'''
+First download the [ARPES data](https://figshare.com/s/762454387fddddd0987a), unzip it, and create a folder for storing the processed ARPES. Then download/clone this repo and run:
+```
+python main.py --data_path PROCESSED_APRES_PATH
+```
 to get the binary classification results from the paper. To get results with other parameters, one can change the settings in utils/parsing.py.
