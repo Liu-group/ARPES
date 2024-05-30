@@ -1,6 +1,5 @@
 # ARPESNet
-This repository contains the code for the paper \\
-"Explainable Machine Learning Identification of Superconductivity from Single-Particle Spectral Functions".
+This repository contains the code for the paper "Explainable Machine Learning Identification of Superconductivity from Single-Particle Spectral Functions".
 ## Abstract
 The traditional method of identifying symmetry-breaking phase transitions through the emergence of a single-particle gap encounters significant challenges in quantum materials with strong fluctuations. To address this, we have developed a data-driven approach using a domain-adversarial neural network trained on simulated spectra of cuprates. This model compensates for the scarcity of experimental data -- a significant barrier to the wide deployment of machine learning in physical research -- by leveraging the abundance of theoretically simulated data. When applied to unlabeled experimental spectra, our model successfully distinguishes the true superconducting states from gapped fluctuating states, without the need for fine temperature sampling across the transition. Further, the explanation of our machine learning model reveals crucial role of the Fermi-surface spectral intensity even in gapped states. It paves the way for robust and direct spectroscopic identification of fluctuating orders, particularly in low-dimensional, strongly correlated materials.
 
