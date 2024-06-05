@@ -40,7 +40,7 @@ class ARPESNet(nn.Module):
         out = self.convs(x)
         self.pool_layer = pool_layer
         if pool_layer:
-            h = int((fcw*2/(hidden_channels//2))**0.5)
+            #h = int((fcw*2/(hidden_channels//2))**0.5)
             self.pool_layer = nn.AdaptiveAvgPool2d(output_size=(5, 5))
             out = self.pool_layer(out)
         h_shape = out.size()[1:]

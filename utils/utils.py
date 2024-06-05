@@ -36,6 +36,7 @@ def load_checkpoint(args):
                          hidden_channels=args.hidden_channels, 
                          conditional=args.conditional,
                          fcw=args.fcw,
+                         pool_layer=args.pool_layer,
                          prediction_mode=True,
                         )
         model.load_state_dict(state["state_dict"])

@@ -71,8 +71,9 @@ def run_training(args, model, data_source, data_target):
         if epoch - best_epoch > args.early_stop_epoch:
             break       
     print(f"Best Epoch: {best_epoch:02d} | Best {args.opt_goal}: {best_score:.3f}")
-    # save
     if args.save_best_model:
+        if not os.path.exists(args.checkpoint_path):
+            os.makedirs(args.checkpoint_path)
         save_path = os.path.join(args.checkpoint_path, str(args.num_classes) + '_' + str(args.seed) + f'_model_{args.adaptation}.pt')
         torch.save({"full_model": best_model, "state_dict": best_model.state_dict(), "args": args}, save_path)
         print('Saved the best model as ' + save_path)
