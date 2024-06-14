@@ -80,15 +80,14 @@ def main():
     print('{} Accuracy: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(acc_all), np.std(acc_all)))
     print('{} Transfer Score: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(tss), np.std(tss)))
     print(model)
-
     args.mode == 'predict'
     args.seed = init_seed
     set_seed(args.seed)
     ensemble = []
     exp_2014_acc_all, exp_2015_acc_all = [], []
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    for i in range(10):
-        args.seed = 42 + i
+    for i in range(args.num_folds):
+        args.seed = init_seed + i
         X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
         X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
         pred_2014, exp_2014 = test_exp(args, X_2014, y_2014, 'exp_2014')
@@ -109,5 +108,6 @@ def main():
     print('Exp_2015 Ensemble')
     print(classification_report(y_exp_2015, y_pred_2015, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
     print(confusion_matrix(y_exp_2015, y_pred_2015))
+
 if __name__ == '__main__':
     main()

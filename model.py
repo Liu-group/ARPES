@@ -110,6 +110,7 @@ class ModelSoftmaxWrapper(nn.Module):
     def __init__(self, model):
         super(ModelSoftmaxWrapper, self).__init__()
         self.model = model
+        self.model.prediction_mode = True
     def forward(self, x, alpha=0.):
         out = self.model(x, alpha=alpha)
         out = torch.nn.functional.softmax(out, dim=1)
