@@ -14,7 +14,7 @@ captum             0.7.0
 numpy              1.23.5
 ```
 ## Usage
-First download/clone this repo, then enter the repo and download the ARPES data from https://figshare.com/s/762454387fddddd0987a. To reproduce the binary classification results in the paper, simply run:
+First download/clone this repo, then enter the repo and download the [ARPES data](https://figshare.com/s/762454387fddddd0987a). To reproduce the binary classification results in the paper, simply run:
 ```
 python main.py --data_path /ML_ARPES_data/Processed_data --num_classes 2 --lr 5e-4 --adaptation 1.2
 ```
