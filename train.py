@@ -13,10 +13,10 @@ from torch.utils.data import DataLoader
 import collections
 from visualize import visualize
 from transfer_score import get_transfer_score
-
+import time 
 def get_data_split(args, y):
     idx_all = np.arange(len(y))
-    train_ratio, val_ratio, test_ratio = args.split[0], args.split[1], args.split[2] 
+    train_ratio, val_ratio, test_ratio = args.source_split[0], args.source_split[1], args.source_split[2] 
 
     idx_train, idx_test = train_test_split(idx_all, test_size=test_ratio, random_state=42, stratify=y)
     idx_train, idx_val = train_test_split(idx_train, train_size=train_ratio/(1-test_ratio) , test_size=val_ratio/(1-test_ratio), random_state=42, stratify=y[idx_train])
@@ -30,7 +30,7 @@ def run_training(args, model, data_source, data_target):
     idx_train, idx_val, idx_test = get_data_split(args, y_source)
     print("Number of sim training samples: ", len(idx_train))
     # source data loader
-    source_dataset = ARPESDataset(X_source, y_source, transform=normalize_transform('sim'))
+    source_dataset = ARPESDataset(X_source, y_source, transform=normalize_transform('sim', args.rmbg))
     train_dataset = torch.utils.data.Subset(source_dataset, idx_train)
     val_dataset = torch.utils.data.Subset(source_dataset, idx_val)
     test_dataset = torch.utils.data.Subset(source_dataset, idx_test)
@@ -39,7 +39,7 @@ def run_training(args, model, data_source, data_target):
     test_loader = DataLoader(test_dataset, batch_size=len(idx_test), shuffle=False)
 
     # target data loader
-    target_dataset = ARPESDataset(X_target, transform=normalize_transform(args.adv_on))
+    target_dataset = ARPESDataset(X_target, transform=normalize_transform(args.adv_on, args.rmbg))
     target_loader = DataLoader(target_dataset, batch_size=args.batch_size, shuffle=True)
     print('Target data size: ', len(target_dataset))
     
@@ -49,9 +49,14 @@ def run_training(args, model, data_source, data_target):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     best_val_loss, best_epoch, best_score = float('inf'), 0, -float('inf')
     model = model.to(device)
+    # time
     for epoch in range(args.epochs):
+        s_time = time.time()
         train_losses = train(args, epoch, model, train_loader, target_loader, loss_func, optimizer, device)
+        t_time = time.time() - s_time
+        s_time = time.time()
         val_losses, val_score = evaluate(model, val_loader, target_loader, loss_func, metric_func, device)
+        v_time = time.time() - s_time
 
         if args.opt_goal=='ts':
             ts_model = copy.deepcopy(model)
@@ -59,7 +64,7 @@ def run_training(args, model, data_source, data_target):
             del ts_model
         else:
             ts = 0
-        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f} | ts: {ts:.3f}")
+        print(f"Epoch: {epoch:02d} | Train Label Loss: {train_losses['err_s_label']:.3f} | Train Domain Loss: {train_losses['err_domain']:.3f} | Val Loss: {val_losses:.3f} | Val Acc: {val_score:.3f} | ts: {ts:.3f} | Train time: {t_time:.3f} | Infer time: {v_time:.3f}")
 
         if args.opt_goal=='accuracy' and val_score > best_score \
         or args.opt_goal=='val_loss' and val_losses < best_val_loss \

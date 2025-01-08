@@ -129,7 +129,6 @@ dmypy.json
 
 archive/
 __MACOSX/
-checkpoints/
 images/
 models/
 occ_dat/
@@ -137,6 +136,7 @@ occ_pics/
 results/
 raw_data/
 visualization/
+new_arch_try/
 *.npy
 *.out
 *.log
@@ -151,4 +151,5 @@ visualization/
 *.ipynb
 *.mat
 pixelda*
+occ*
 run_task.py

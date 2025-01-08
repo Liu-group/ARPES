@@ -28,7 +28,7 @@ def load_checkpoint(args):
     assert os.path.exists(save_path), f"Checkpoint {save_path} not found"
     print('Loading checkpoint from: ' + save_path)
     if args.gpu is not None:
-        state = torch.load(save_path )
+        state = torch.load(save_path)
     else:
         state = torch.load(save_path , map_location=torch.device('cpu'))
     if args.mode == 'predict':
@@ -45,25 +45,25 @@ def load_checkpoint(args):
 
     return model
 
-def normalize_transform(name):
+def normalize_transform(name, rmbg = True):
     """
     Normalizes the input tensor.
     """
     if name == 'sim':
         transform = transforms.Compose([transforms.ToTensor(),
-                                        Normalize((1.000,), (2.517)),
+                                        Normalize((1.000,), (2.517 if rmbg else 3.395)),
                                         ])
     elif name == 'exp_2014':
         transform = transforms.Compose([transforms.ToTensor(),
-                                        Normalize((1.000,), (1.754))
+                                        Normalize((1.000,), (1.754 if rmbg else 0.547))
                                         ])
     elif name == 'exp_2015':
         transform = transforms.Compose([transforms.ToTensor(),
-                                        Normalize((1.000,), (1.637))
+                                        Normalize((1.000,), (1.637 if rmbg else 0.803))
                                         ])
     else:
         transform = transforms.Compose([transforms.ToTensor(),
-                                        Normalize((1.000,), (1.699))
+                                        Normalize((1.000,), (1.699 if rmbg else 0.681))
                                         ])
     return transform
 
@@ -77,12 +77,24 @@ def get_partial_sample(X, y, ratio, stratify=False):
         idx = np.random.choice(len(y), int(len(y)*ratio), replace=False)
     return X[idx], y[idx]
 
-def get_num_sample(X, y, num, stratify=False):
+def get_num_sample(X, y, num, sample = 'stratify'):
     """
     Returns a partial sample of the dataset.
     """
-    if stratify:
+    if sample == 'stratify':
         idx, _ = train_test_split(np.arange(len(y)), test_size=num/len(y), random_state=42, stratify=y)
+    elif sample == 'single_class_0':
+        idx = np.where(y == 0)[0]
+        assert len(idx) >= num, f"Number of samples for class 0 is {len(idx)} less than {num}"
+        idx = np.random.choice(idx, num, replace=False)
+    elif sample == 'single_class_1':
+        idx = np.where(y == 1)[0]
+        assert len(idx) >= num, f"Number of samples for class 1 is {len(idx)} less than {num}"
+        idx = np.random.choice(idx, num, replace=False)
+    elif sample == 'single_class_2':
+        idx = np.where(y == 2)[0]
+        assert len(idx) >= num, f"Number of samples for class 2 is {len(idx)} less than {num}"
+        idx = np.random.choice(idx, num, replace=False)
     else:
         idx = np.random.choice(len(y), num, replace=False)
     print(f"Number of target samples used: {len(idx)}")

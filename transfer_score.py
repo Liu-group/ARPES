@@ -58,7 +58,6 @@ def get_transfer_score(target_dataset, model, num_classes, rank):
     if ts_cluster == True:
         X = output_fs[0][0].cpu().numpy()
         sample_size = int(X.shape[0]*0.05) #0.05 (5%) based on paper by Lawson and Jures
-
         #a uniform random sample in the original data space
         X_uniform_random_sample = uniform(X.min(axis=0), X.max(axis=0) ,(sample_size , X.shape[1]))
         random_indices=sample(range(0, X.shape[0], 1), sample_size)

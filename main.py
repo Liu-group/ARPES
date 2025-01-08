@@ -13,10 +13,18 @@ from dataset import ARPESDataset
 from typing import Optional
 torch.set_default_tensor_type(torch.DoubleTensor)
 
-def load_data(data_path, name, num_classes):
-    x = np.load(data_path + '/data_' + name + '_processed_nobg.npy')
-    y = np.load(data_path + '/data_' + name + '_sc_values.npy').astype(int)
-    temp = np.load(data_path + '/data_' + name + '_templist.npy')
+def load_data(data_path, name, num_classes, rmbg=True):
+    """ load data """
+    if rmbg == True:
+        x = np.load(data_path + '/data_' + name + '_processed_nobg.npy')
+        y = np.load(data_path + '/data_' + name + '_sc_values_nobg.npy').astype(int)
+        temp = np.load(data_path + '/data_' + name + '_templist_nobg.npy')
+        print(f'{name} data loaded without background')
+    else:
+        x = np.load(data_path + '/data_' + name + '_processed_bg.npy')
+        y = np.load(data_path + '/data_' + name + '_sc_values_bg.npy').astype(int)
+        temp = np.load(data_path + '/data_' + name + '_templist_bg.npy')
+        print(f'{name} data loaded with background')
     if num_classes==2:
         y[y==1]=0
         y[y==2]=1
@@ -26,7 +34,7 @@ def test_exp(args, x_exp, y_exp, name, model: Optional[nn.Module] = None):
     """ test on exp data """
     # dataloader for exp data
     show_prob = True if model != None else False
-    exp_dataset = ARPESDataset(x_exp, y_exp, transform=normalize_transform(name))
+    exp_dataset = ARPESDataset(x_exp, y_exp, transform=normalize_transform(name, rmbg=args.rmbg) )
     exp_loader = DataLoader(exp_dataset, batch_size=len(y_exp), shuffle=False)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if model is None:
@@ -42,44 +50,47 @@ def test_exp(args, x_exp, y_exp, name, model: Optional[nn.Module] = None):
 def main():
     args = parse_args()
     print(args)
-    args.mode = 'train'
     init_seed = args.seed
-    tss = []
-    tss, pred_all, acc_all = [], [], []
-    X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes)
-    if args.adv_on == 'exp_all':
-        X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
-        X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
-        X_target = np.concatenate((X_2014, X_2015), axis=0)
-        y_target = np.concatenate((y_2014, y_2015), axis=0)
-        if args.num_adv != 86:
-            X_target, y_target = get_num_sample(X_target, y_target, args.num_adv)
-    else:
-        X_target, y_target, _ = load_data(args.data_path, args.adv_on, args.num_classes)
-        if (args.num_adv != 41 and args.adv_on == 'exp_2015') or (args.num_adv != 45 and args.adv_on == 'exp_2014'):
-            X_target, y_target = get_num_sample(X_target, y_target, args.num_adv)        
-    for fold_num in range(args.num_folds):
-        print(f'Fold {fold_num}')
-        args.seed = init_seed + fold_num
-        set_seed(args.seed)
-        model = ARPESNet(num_classes=args.num_classes,
-                        hidden_channels=args.hidden_channels, 
-                        negative_slope=args.negative_slope,
-                        dropout=args.dropout,
-                        conditional=args.conditional,
-                        pool_layer=args.pool_layer,
-                        fcw=args.fcw,
-                        )
-        best_model, _, ts = run_training(args, model, (X_source, y_source), (X_target, _))
-        pred, y = test_exp(args, X_target, y_target, args.adv_on, best_model)
-        pred_all.append(pred)
-        tss.append(ts)
-        acc_all.append(accuracy_score(y, pred))
-    # get mean and std of accuracy, precision, recall, f1-score
-    pred_all = np.array(pred_all)
-    print('{} Accuracy: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(acc_all), np.std(acc_all)))
-    print('{} Transfer Score: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(tss), np.std(tss)))
-    print(model)
+    if args.mode == 'train':
+        tss = []
+        tss, pred_all, acc_all = [], [], []
+        X_source, y_source, _ = load_data(args.data_path, 'sim', args.num_classes, args.rmbg)
+        if args.adv_on == 'exp_all':
+            X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes, args.rmbg)
+            X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes, args.rmbg)
+            X_target_test = X_target_train = np.concatenate((X_2014, X_2015), axis=0)
+            y_target_test = y_target_train = np.concatenate((y_2014, y_2015), axis=0)
+            if args.num_adv != 86:
+                X_target_train, y_target_train = get_num_sample(X_target_train, y_target_train, args.num_adv)
+        else:
+            X_target_train, y_target_train, _ = load_data(args.data_path, args.adv_on, args.num_classes)
+            X_target_test, y_target_test, _ = load_data(args.data_path, 'exp_2015' if args.adv_on=='exp_2014' else 'exp_2014', args.num_classes)
+            if (args.num_adv > 41 and args.adv_on == 'exp_2015') or (args.num_adv > 45 and args.adv_on == 'exp_2014'):
+                args.num_adv = 41 if args.adv_on == 'exp_2015' else 45
+            if (args.num_adv != 41 and args.adv_on == 'exp_2015') or (args.num_adv != 45 and args.adv_on == 'exp_2014'):
+                X_target_train, y_target_train = get_num_sample(X_target_train, y_target_train, args.num_adv)        
+        for fold_num in range(args.num_folds):
+            print(f'Fold {fold_num}')
+            args.seed = init_seed + fold_num
+            set_seed(args.seed)
+            model = ARPESNet(num_classes=args.num_classes,
+                            hidden_channels=args.hidden_channels, 
+                            negative_slope=args.negative_slope,
+                            dropout=args.dropout,
+                            conditional=args.conditional,
+                            pool_layer=args.pool_layer,
+                            fcw=args.fcw,
+                            )
+            best_model, _, ts = run_training(args, model, (X_source, y_source), (X_target_train, _))
+            pred, y = test_exp(args, X_target_test, y_target_test, 'exp_2015' if args.adv_on=='exp_2014' else 'exp_2014', best_model)
+            pred_all.append(pred)
+            tss.append(ts)
+            acc_all.append(accuracy_score(y, pred))
+        # get mean and std of accuracy, precision, recall, f1-score
+        pred_all = np.array(pred_all)
+        print('{} Accuracy: {:.3f} ± {:.3f}'.format('exp_2015' if args.adv_on=='exp_2014' else 'exp_2014', np.mean(acc_all), np.std(acc_all)))
+        print('{} Transfer Score: {:.3f} ± {:.3f}'.format(args.adv_on, np.mean(tss), np.std(tss)))
+        print(model)
     args.mode == 'predict'
     args.seed = init_seed
     set_seed(args.seed)
@@ -88,10 +99,10 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     for i in range(args.num_folds):
         args.seed = init_seed + i
-        X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes)
-        X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes)
-        pred_2014, exp_2014 = test_exp(args, X_2014, y_2014, 'exp_2014')
-        pred_2015, exp_2015 =  test_exp(args, X_2015, y_2015, 'exp_2015')
+        X_2014, y_2014, _ = load_data(args.data_path, 'exp_2014', args.num_classes, args.rmbg)
+        X_2015, y_2015, _ = load_data(args.data_path, 'exp_2015', args.num_classes, args.rmbg)
+        pred_2014, exp_2014 = test_exp(args, X_2014, y_2014, args.adv_on)
+        pred_2015, exp_2015 =  test_exp(args, X_2015, y_2015, args.adv_on)
         exp_2014_acc_all.append(accuracy_score(exp_2014, pred_2014))
         exp_2015_acc_all.append(accuracy_score(exp_2015, pred_2015))
         model = load_checkpoint(args).to(device)
@@ -108,6 +119,5 @@ def main():
     print('Exp_2015 Ensemble')
     print(classification_report(y_exp_2015, y_pred_2015, target_names=['0', '1', '2'] if args.num_classes==3 else ['0', '1']))
     print(confusion_matrix(y_exp_2015, y_pred_2015))
-
 if __name__ == '__main__':
     main()
